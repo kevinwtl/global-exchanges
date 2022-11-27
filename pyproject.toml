@@ -1,0 +1,15 @@
+[project]
+name = "stock-exchanges"
+description = "scraper for various stock exchanges"
+version = "0.1.0"
+authors = [
+    { name = "Kevin Wong", email = "wongtinglam@gmail.com" }
+]
+dependencies = [
+    "pandas",
+    "requests",
+]
+
+[build-system]
+requires = ["setuptools>=43.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
