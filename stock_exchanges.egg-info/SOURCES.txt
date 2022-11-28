@@ -1,5 +1,6 @@
 pyproject.toml
 stock_exchanges/HKEX.py
+stock_exchanges/HSI.py
 stock_exchanges/KRX.py
 stock_exchanges/NYSE.py
 stock_exchanges/__init__.py
