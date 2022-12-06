@@ -1,6 +1,6 @@
-# stock-exchanges
+# global-exchanges
 
-A scraper to retrieve publicly available information from stock exchanges / index provider.
+A scraper to retrieve publicly available non-price information from stock exchanges / index provider.
 
 ## Supported Exchanges & Methods
 
