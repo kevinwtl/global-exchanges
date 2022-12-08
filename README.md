@@ -14,6 +14,14 @@ A scraper to retrieve publicly available non-price information from stock exchan
 6. [Company News](https://www.hkexnews.hk/index.htm)
 7. [Disclosure of Interests](https://www2.hkexnews.hk/Shareholding-Disclosures/Disclosure-of-Interests?sc_lang=en)
 
+
+### CCASS (Shares Custodian System under HKEX)
+
+[Central Clearing and Settlement System (CCASS)](https://www3.hkexnews.hk/sdw/search/searchsdw.aspx) allows investors to track share holdings of brokers (on T+2 basis).
+Could be a useful tool to be aware of share activities from major shareholders when combined with Disclosure of Interestss / ownership analysis.
+
+Here I am only providing a framework to scraping the data into SQL tables.
+
 ### Hang Seng Index (HSI)
 
 1. Constituents of indexes
