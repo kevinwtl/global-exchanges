@@ -8,6 +8,8 @@ import json
 from typing import Literal
 import warnings
 
+from _exchanges import CCASS
+
 
 class HKEX:
     @staticmethod
@@ -142,6 +144,13 @@ class HKEX:
             .to_dict()
         )
         return participants_dict
+
+    @staticmethod
+    def CCASS_stocks_list(search_date: datetime = datetime.today()) -> list[int]:
+        """A list returning all available stocks on CCASS at particular settlement date."""
+        CCASS_stock_list = pd.DataFrame(requests.get(f'https://www3.hkexnews.hk/sdw/search/stocklist.aspx?sortby=stockcode&shareholdingdate={search_date.strftime("%Y%m%d")}').json())['c'].to_list()
+        CCASS_stock_list = [int(i) for i in CCASS_stock_list]
+        return CCASS_stock_list
 
     @staticmethod
     def southbound_eligilble_stocks() -> pd.DataFrame:
@@ -526,5 +535,6 @@ class HKEX:
 
 
 if __name__ == "__main__":
-    test_df = HKEX.DI(242719).all_filings()
-    print(test_df)
+    #test_df = HKEX.DI(242719).all_filings()
+    #print(test_df)
+    print(HKEX.CCASS_participants_dict())

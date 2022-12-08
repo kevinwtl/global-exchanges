@@ -1,5 +1,5 @@
 [project]
-name = "stock-exchanges"
+name = "global-exchanges"
 description = "scraper for various stock exchanges"
 version = "0.1.0"
 authors = [
