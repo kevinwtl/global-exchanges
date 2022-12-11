@@ -48,8 +48,8 @@ class HKEX:
         trs = []
         for row in soup.find("table").find_all("tr")[1:]:
             report_date = row.find_all("td")[0].text
-            pdf_link = row.find_all("td")[1].a["href"]
-            csv_link = row.find_all("td")[2].a["href"]
+            pdf_link = row.find_all("td")[1].a["href"].split('?')[0]
+            csv_link = row.find_all("td")[2].a["href"].split('?')[0]
             trs.append([report_date, pdf_link, csv_link])
 
         df = pd.DataFrame(trs, columns=["Reporting Date", "PDF Link", "CSV Link"])
