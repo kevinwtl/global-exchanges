@@ -7,6 +7,8 @@ import sqlite3
 from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
 from ratelimit import limits, sleep_and_retry
+import numpy as np
+from tqdm import tqdm
 
 
 class DataScraper:
@@ -25,15 +27,15 @@ class DataScraper:
         self.pool = ThreadPoolExecutor()
 
     def run(self):
-        for i in range(self.days_to_scrape_data):
+        for i in tqdm(range(self.days_to_scrape_data)):
             search_date = date.today() - timedelta(1) - timedelta(i)
             stock_list = HKEX.CCASS_stocks_list(search_date=search_date)
-            for ticker in stock_list:
+            for ticker in tqdm(stock_list):
                 self.pool.submit(self.scrape(ticker=ticker, search_date=search_date))
 
     @sleep_and_retry
     @limits(calls=5, period=1)
-    def scrape(self, ticker, search_date):
+    def scrape(self, ticker: int, search_date: datetime):
         url = "https://www3.hkexnews.hk/sdw/search/searchsdw.aspx"
         payload = {"__EVENTTARGET": "btnSearch", "txtShareholdingDate": search_date.strftime("%Y/%m/%d"), "txtStockCode": str(ticker).zfill(5)}
 
@@ -55,11 +57,17 @@ class DataScraper:
             scraped_summary_df["Settlement Date"] = pd.to_datetime(scraped_summary_df["Settlement Date"]).dt.date
 
             # Shareholdings Data
-            scraped_temp_df = pd.read_html(response.content)[0]
-            scraped_temp_df = scraped_temp_df.applymap(lambda x: x.split(": ")[-1])
-            scraped_temp_df = scraped_temp_df.rename(
-                columns={"Participant ID": "CCASS ID", "Name of CCASS Participant(* for Consenting Investor Participants )": "Participant", "Shareholding": "End of Day Shareholding", "% of the total number of Issued Shares/ Warrants/ Units": "End of Day Shareholding (% of Issued Shares)"}
+            scraped_temp_df = pd.read_html(response.content)[0].rename(
+                columns={
+                    "Participant ID": "CCASS ID",
+                    "Name of CCASS Participant(* for Consenting Investor Participants )": "Participant",
+                    "Shareholding": "End of Day Shareholding",
+                    "% of the total number of Issued Shares/ Warrants/ Units": "End of Day Shareholding (% of Issued Shares)"
+                    }
             )
+            scraped_temp_df = scraped_temp_df.applymap(lambda x: x.split(":")[-1].strip())
+            scraped_temp_df = scraped_temp_df.replace("", np.nan)
+
             scraped_temp_df["Ticker"] = ticker
             scraped_temp_df["Settlement Date"] = settlement_date
             scraped_temp_df["End of Day Shareholding"] = pd.to_numeric(scraped_temp_df["End of Day Shareholding"].str.replace(",", ""))
@@ -67,12 +75,12 @@ class DataScraper:
             scraped_temp_df = scraped_temp_df[["Ticker", "CCASS ID", "Settlement Date", "End of Day Shareholding", "End of Day Shareholding (% of Issued Shares)"]]
 
             with self.lock:
-                scraped_summary_df.to_sql(name=f"{ticker}_summary", con=self.db_connection, if_exists="append", index=False)
-                scraped_temp_df.to_sql(name=f"{ticker}", con=self.db_connection, if_exists="append", index=False)
+                scraped_summary_df.to_sql(name="summary", con=self.db_connection, if_exists="append", index=False)
+                scraped_temp_df.to_sql(name="broker", con=self.db_connection, if_exists="append", index=False)
 
         except ValueError as e:
             print(f"{ticker} @ {search_date.strftime('%Y/%m/%d')} encountered {e.args}")
 
 
 if __name__ == "__main__":
-    DataScraper('test_database.db',days_to_scrape_data=1).run()
+    DataScraper(r"CCASS.db", days_to_scrape_data=1).run()
