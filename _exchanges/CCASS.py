@@ -2,7 +2,6 @@ from datetime import date, datetime, timedelta
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-from _exchanges import HKEX
 import sqlite3
 from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
@@ -20,24 +19,31 @@ class DataScraper:
     3. Weekends are not dropped
     """
 
-    def __init__(self, database_path: str, days_to_scrape_data: int = 3):
+    def __init__(self, database_path: str, days_to_scrape_data: int = 3, ticker_list: list[int] = None):
         self.days_to_scrape_data = days_to_scrape_data
+        self.ticker_list = ticker_list
         self.db_connection = sqlite3.connect(database_path, check_same_thread=False)
         self.lock = Lock()
         self.pool = ThreadPoolExecutor()
 
+    def stock_dict(self, search_date) -> dict[int, str]:
+        df = pd.DataFrame(requests.get(f'https://www3.hkexnews.hk/sdw/search/stocklist.aspx?sortby=stockcode&shareholdingdate={search_date.strftime("%Y%m%d")}', timeout=5).json())
+        df['c'] = pd.to_numeric(df['c'])
+        df = df.set_index('c')['n']
+        return df.to_dict()
+
     def run(self):
         for i in tqdm(range(self.days_to_scrape_data)):
             search_date = date.today() - timedelta(1) - timedelta(i)
-            stock_list = HKEX.CCASS_stocks_list(search_date=search_date)
-            for ticker in tqdm(stock_list):
+            ticker_list = list(self.stock_dict(search_date=search_date).keys()) if self.ticker_list is None else self.ticker_list
+            for ticker in tqdm(ticker_list):
                 self.pool.submit(self.scrape(ticker=ticker, search_date=search_date))
 
     @sleep_and_retry
-    @limits(calls=5, period=1)
-    def scrape(self, ticker: int, search_date: datetime):
+    @limits(calls=3, period=1)
+    def scrape(self, ticker: int, search_date: datetime, temp_ticker: int = None):
         url = "https://www3.hkexnews.hk/sdw/search/searchsdw.aspx"
-        payload = {"__EVENTTARGET": "btnSearch", "txtShareholdingDate": search_date.strftime("%Y/%m/%d"), "txtStockCode": str(ticker).zfill(5)}
+        payload = {"__EVENTTARGET": "btnSearch", "txtShareholdingDate": search_date.strftime("%Y/%m/%d"), "txtStockCode": str(temp_ticker if temp_ticker is not None else ticker).zfill(5)}
 
         try:
             response = requests.post(url, data=payload, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36"}, timeout=100)
@@ -79,8 +85,18 @@ class DataScraper:
                 scraped_temp_df.to_sql(name="broker", con=self.db_connection, if_exists="append", index=False)
 
         except ValueError as e:
-            print(f"{ticker} @ {search_date.strftime('%Y/%m/%d')} encountered {e.args}")
+            if "No tables found" in e.args:
+                # Possibly new temporary ticker due to Share Split
+                stock_dict = self.stock_dict(search_date=search_date)
+                original_stock_name = stock_dict[ticker]
+                for temp_stock_code, temp_stock_name in stock_dict.items():
+                    if temp_stock_name == f"{original_stock_name}-TEMPORARY COUNTER":
+                        print(f"{ticker} @ {search_date.strftime('%Y/%m/%d')} found temporary ticker {temp_stock_code}")
+                        self.scrape(ticker = ticker, search_date=search_date, temp_ticker = temp_stock_code)
+                        break
+            else:
+                print(f"{ticker} @ {search_date.strftime('%Y/%m/%d')} encountered {e.args}")
 
 
 if __name__ == "__main__":
-    DataScraper(r"CCASS.db", days_to_scrape_data=1).run()
+    DataScraper(r"CCASS.db", days_to_scrape_data=5, ticker_list=[2060]).run()
