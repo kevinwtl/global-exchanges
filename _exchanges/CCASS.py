@@ -10,6 +10,10 @@ import numpy as np
 from tqdm import tqdm
 
 
+class CCASSDataBase:
+    def __init__(self):
+        ...
+
 class DataScraper:
     """Get the static list of all shareholders at the specific settle date. Do not perform and calculations or filtering.
 
@@ -54,35 +58,39 @@ class DataScraper:
             # Summary Data
             summary_soup = BeautifulSoup(response.content, "lxml")
             issued_shares = int(summary_soup.find(class_="summary-value").text.replace(",", ""))
-            summary_dict = {"Ticker": ticker, "Settlement Date": settlement_date, "Shares Issued": issued_shares}  # fill initial value of summary dict
+            summary_dict = {"ticker": ticker, "settle_date": settlement_date, "issued_shrs": issued_shares}  # fill initial value of summary dict
             for i in range(len(summary_soup.find_all(class_="ccass-search-datarow"))):
                 key = summary_soup.find_all(class_="ccass-search-datarow")[i].find_all(class_="summary-category")[0].text.strip()
                 value = int(summary_soup.find_all(class_="ccass-search-datarow")[i].find(class_="value").text.replace(",", ""))
                 summary_dict[key] = value
             scraped_summary_df = pd.DataFrame(summary_dict, index=[0])
-            scraped_summary_df["Settlement Date"] = pd.to_datetime(scraped_summary_df["Settlement Date"]).dt.date
+            scraped_summary_df["settle_date"] = pd.to_datetime(scraped_summary_df["settle_date"]).dt.date
+            scraped_summary_df = scraped_summary_df.rename(columns = {"Market Intermediaries":"mkt_intermed","Consenting Investor Participants":"consent_inv","Non-consenting Investor Participants":"non_consent_inv","Total":"shrs_in_ccass"})
+
 
             # Shareholdings Data
             scraped_temp_df = pd.read_html(response.content)[0].rename(
                 columns={
-                    "Participant ID": "CCASS ID",
+                    "Participant ID": "ccass_id",
                     "Name of CCASS Participant(* for Consenting Investor Participants )": "Participant",
-                    "Shareholding": "End of Day Shareholding",
-                    "% of the total number of Issued Shares/ Warrants/ Units": "End of Day Shareholding (% of Issued Shares)"
+                    "Shareholding": "shareholding",
+                    "% of the total number of Issued Shares/ Warrants/ Units": "pct_shareholding"
                     }
             )
             scraped_temp_df = scraped_temp_df.applymap(lambda x: x.split(":")[-1].strip())
             scraped_temp_df = scraped_temp_df.replace("", np.nan)
 
-            scraped_temp_df["Ticker"] = ticker
-            scraped_temp_df["Settlement Date"] = settlement_date
-            scraped_temp_df["End of Day Shareholding"] = pd.to_numeric(scraped_temp_df["End of Day Shareholding"].str.replace(",", ""))
-            scraped_temp_df["End of Day Shareholding (% of Issued Shares)"] = scraped_temp_df["End of Day Shareholding"] / issued_shares
-            scraped_temp_df = scraped_temp_df[["Ticker", "CCASS ID", "Settlement Date", "End of Day Shareholding", "End of Day Shareholding (% of Issued Shares)"]]
+            scraped_temp_df["ticker"] = ticker
+            scraped_temp_df["settle_date"] = settlement_date
+            scraped_temp_df["shareholding"] = pd.to_numeric(scraped_temp_df["shareholding"].str.replace(",", ""))
+            scraped_temp_df["pct_shareholding"] = scraped_temp_df["shareholding"] / issued_shares
+            scraped_temp_df = scraped_temp_df[["ticker", "ccass_id", "settle_date", "shareholding", "pct_shareholding"]]
 
-            with self.lock:
+
+
+            with self.lock: #TODO: How to bypass unique key error?
                 scraped_summary_df.to_sql(name="summary", con=self.db_connection, if_exists="append", index=False)
-                scraped_temp_df.to_sql(name="broker", con=self.db_connection, if_exists="append", index=False)
+                scraped_temp_df.to_sql(name="holdings", con=self.db_connection, if_exists="append", index=False)
 
         except ValueError as e:
             if "No tables found" in e.args:
